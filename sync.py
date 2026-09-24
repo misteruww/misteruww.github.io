@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import time
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
@@ -9,7 +10,8 @@ TARGET = Path('_site')
 
 
 def fetch_bytes(path):
-    request = Request(SOURCE + path, headers={'User-Agent': 'MisterWW-News-Mirror/1.0'})
+    fresh_url = SOURCE + path + ('&' if '?' in path else '?') + f'mirror={time.time_ns()}'
+    request = Request(fresh_url, headers={'User-Agent': 'MisterWW-News-Mirror/1.0', 'Cache-Control': 'no-cache'})
     with urlopen(request, timeout=30) as response:
         if response.status != 200:
             raise RuntimeError(f'{path}: HTTP {response.status}')

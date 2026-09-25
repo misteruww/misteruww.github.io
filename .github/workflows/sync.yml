@@ -1,7 +1,7 @@
 name: Sync Mister WW NEWS
 on:
   schedule:
-    - cron: '45 0,10,16 * * *'
+    - cron: '0 0,10,16 * * *'
   workflow_dispatch:
   push:
     branches: [main]

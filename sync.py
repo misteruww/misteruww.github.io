@@ -7,6 +7,7 @@ from xml.etree import ElementTree
 SOURCE = 'https://misterww-noticias.misterwwpr.chatgpt.site'
 DESTINATION = 'https://misteruww.github.io'
 TARGET = Path('_site')
+ASSET_PATTERN = re.compile(r'/images/[a-zA-Z0-9._-]+\.(?:jpg|jpeg|png|webp|gif|svg)', re.IGNORECASE)
 
 
 def fetch_bytes(path):
@@ -24,23 +25,33 @@ def fetch(path):
 
 sitemap = fetch('/sitemap.xml')
 root = ElementTree.fromstring(sitemap)
-paths = [url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}loc').text.removeprefix(SOURCE) for url in root]
+namespace = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
+paths = []
+for url in root:
+    location = url.find(f'{namespace}loc')
+    if location is None or not location.text or not location.text.startswith(SOURCE + '/'):
+        raise RuntimeError('The source sitemap contains an unexpected URL')
+    paths.append(location.text[len(SOURCE):])
 if '/' not in paths or len(paths) < 2:
     raise RuntimeError('The source sitemap contains no article pages')
 
+assets = set()
 for route in paths:
-    relative = 'index.html' if route == '/' else route.lstrip('/')
+    relative = route.lstrip('/')
+    if not relative or route.endswith('/'):
+        relative += 'index.html'
     content = fetch(route).replace(SOURCE, DESTINATION)
     target = TARGET / relative
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content)
+    target.write_text(content, encoding='utf-8')
+    assets.update(ASSET_PATTERN.findall(content))
 
-image_paths = set(re.findall(r'/images/[a-z0-9-]+\.(?:jpg|png|webp)', (TARGET / 'index.html').read_text()))
-for image_path in image_paths:
-    target = TARGET / image_path.lstrip('/')
+for asset_path in sorted(assets):
+    target = TARGET / asset_path.lstrip('/')
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(fetch_bytes(image_path))
+    target.write_bytes(fetch_bytes(asset_path))
 
-(TARGET / 'sitemap.xml').write_text(sitemap.replace(SOURCE, DESTINATION))
-(TARGET / 'robots.txt').write_text(fetch('/robots.txt').replace(SOURCE, DESTINATION))
-print(f'Mirrored {len(paths)-1} articles and {len(image_paths)} images')
+(TARGET / 'sitemap.xml').write_text(sitemap.replace(SOURCE, DESTINATION), encoding='utf-8')
+(TARGET / 'robots.txt').write_text(fetch('/robots.txt').replace(SOURCE, DESTINATION), encoding='utf-8')
+(TARGET / '.nojekyll').touch()
+print(f'Mirrored {len(paths)} pages and {len(assets)} image assets')

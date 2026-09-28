@@ -7,7 +7,7 @@ from xml.etree import ElementTree
 SOURCE = 'https://misterww-noticias.misterwwpr.chatgpt.site'
 DESTINATION = 'https://misteruww.github.io'
 TARGET = Path('_site')
-ASSET_PATTERN = re.compile(r'/images/[a-zA-Z0-9._-]+\.(?:jpg|jpeg|png|webp|gif|svg)', re.IGNORECASE)
+ASSET_PATTERN = re.compile(r'/images/[a-zA-Z0-9._-]+\.(?:jpg|jpeg|png|webp|gif|svg|mp4)', re.IGNORECASE)
 
 
 def fetch_bytes(path):

@@ -1,8 +1,10 @@
-name: Publish GameCorePR Maintenance
+name: Publish GameCorePR News
 on:
   workflow_dispatch:
   push:
     branches: [main]
+  schedule:
+    - cron: "*/10 0,10,16 * * *"
 permissions:
   contents: read
   pages: write
@@ -18,11 +20,41 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check GameCorePR edition
+        id: edition
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from urllib.request import urlopen, Request
+          source = 'https://gamecorepr.misterwwpr.chatgpt.site'
+          def read(url):
+              with urlopen(Request(url, headers={'User-Agent': 'GameCorePR-Publisher/1.0'}), timeout=60) as response:
+                  return response.read()
+          latest = read(source + '/publication.json')
+          Path('_publication.json').write_bytes(latest)
+          try:
+              current = read('https://gamecorepr.com/publication.json')
+          except Exception:
+              current = b''
+          changed = os.environ['EVENT_NAME'] != 'schedule' or latest != current
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('changed=' + str(changed).lower() + '\n')
+          print('New GameCorePR edition:', changed)
+          PY
       - uses: actions/configure-pages@v5
-      - name: Build maintenance page
-        run: python3 sync.py
+        if: steps.edition.outputs.changed == 'true'
+      - name: Build GameCorePR edition
+        if: steps.edition.outputs.changed == 'true'
+        run: |
+          python3 sync.py
+          cp _publication.json _site/publication.json
       - uses: actions/upload-pages-artifact@v3
+        if: steps.edition.outputs.changed == 'true'
         with:
           path: _site
       - id: deployment
+        if: steps.edition.outputs.changed == 'true'
         uses: actions/deploy-pages@v4

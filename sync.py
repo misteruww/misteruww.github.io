@@ -1,14 +1,39 @@
 from pathlib import Path
-import shutil
+from urllib.request import urlopen, Request
+from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor
+import xml.etree.ElementTree as ET
+import re, shutil
 
+SOURCE = 'https://gamecorepr.misterwwpr.chatgpt.site'
 TARGET = Path('_site')
 if TARGET.exists():
     shutil.rmtree(TARGET)
 TARGET.mkdir()
-HTML = '''<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>GameCorePR - En mantenimiento</title><style>*{box-sizing:border-box}body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px;background:#101020;color:#f4f3ff;font-family:monospace}main{width:min(100%,560px);padding:48px 24px;text-align:center;border:3px solid #59dce8;box-shadow:8px 8px 0 #7656b7;background:#19182f}.brand{font-size:14px;letter-spacing:3px;color:#59dce8;margin-bottom:28px}h1{font-size:clamp(25px,7vw,38px);color:#fff06a;margin:0 0 22px}p{font-size:16px;line-height:1.7;margin:0;color:#c8c6df}</style></head><body><main><div class="brand">GAMECOREPR.COM</div><h1>En mantenimiento</h1><p>Estamos trabajando en la página.<br>Volvemos pronto.</p></main></body></html>'''
-(TARGET / 'index.html').write_text(HTML, encoding='utf-8')
-(TARGET / '404.html').write_text(HTML, encoding='utf-8')
-(TARGET / 'CNAME').write_text('gamecorepr.com\n', encoding='utf-8')
-(TARGET / 'robots.txt').write_text('User-agent: *\nDisallow: /\n', encoding='utf-8')
+def get(path):
+    with urlopen(Request(SOURCE + path, headers={'User-Agent': 'GameCorePR-Publisher/1.0'}), timeout=60) as response:
+        data = response.read()
+    if b'drippycodeshop' in data.lower() and path.endswith('.html'):
+        raise RuntimeError('Unexpected content; refusing to publish')
+    dest = TARGET / path.lstrip('/')
+    if path.endswith('/'):
+        dest = dest / 'index.html'
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return data
+sitemap = get('/sitemap.xml')
+root = ET.fromstring(sitemap)
+paths = [urlparse(node.text).path for node in root.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')]
+assets = {'/style.css', '/app.js', '/favicon.svg', '/robots.txt'}
+def page(path):
+    data = get(path)
+    text = data.decode()
+    assets.update(re.findall(r'(?:src|href)="(/images/[^"]+)"', text))
+    return path
+with ThreadPoolExecutor(max_workers=6) as pool:
+    list(pool.map(page, paths))
+with ThreadPoolExecutor(max_workers=6) as pool:
+    list(pool.map(get, sorted(assets)))
+(TARGET / 'CNAME').write_text('gamecorepr.com\n')
 (TARGET / '.nojekyll').touch()
-print('GameCorePR maintenance page built; catalog mirroring disabled')
+print(f'Published {len(paths)} GameCorePR pages from its independent project. No scheduled news updates.')
